@@ -60,45 +60,20 @@ export class RepositoriesService {
     owner: string;
     repo: string;
   }): Promise<RepositoryWebhook[]> {
-    const webhooks: RepositoryWebhook[] = [];
+    const repositoryWebhooks = await this.octokit.paginate(
+      'GET /repos/{owner}/{repo}/hooks',
+      { owner, repo, per_page: 100 },
+    );
 
-    let page = 1;
-    let hasNextPage = true;
+    const activeWebhooks: RepositoryWebhook[] = repositoryWebhooks
+      .filter((hook) => hook.active)
+      .map((hook) => ({
+        id: hook.id,
+        name: hook.name,
+        url: hook.config.url,
+      }));
 
-    try {
-      while (hasNextPage) {
-        const { data, headers } = await this.octokit.request(
-          'GET /repos/{owner}/{repo}/hooks',
-          {
-            owner,
-            repo,
-            per_page: 100,
-            page,
-            headers: { accept: 'application/vnd.github+json' },
-          },
-        );
-
-        const activeWebhooks = data
-          .filter((hook) => hook.active)
-          .map((hook) => ({
-            id: hook.id,
-            name: hook.name,
-            url: hook.config.url,
-          }));
-
-        webhooks.push(...activeWebhooks);
-
-        // Check if there are more pages
-        const linkHeader = headers.link;
-        hasNextPage = linkHeader && linkHeader.includes('rel="next"');
-        page++;
-      }
-
-      return webhooks;
-    } catch (error) {
-      console.error('Error fetching webhooks:', error);
-      throw error;
-    }
+    return activeWebhooks;
   }
 
   async retrieveFiles({
