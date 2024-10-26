@@ -39,22 +39,21 @@ export class QueueInterceptor implements NestInterceptor {
       queue
         .add(
           async () => {
-            try {
-              this.logger.debug('Starting execution');
+            this.logger.debug(
+              `Starting execution in queue ${queueOptions.name}`,
+            );
 
-              const value = await firstValueFrom(next.handle());
+            const value = await firstValueFrom(next.handle());
 
-              this.logger.debug(`Execution completed: ${value.name}`);
+            this.logger.debug(
+              `Execution completed in queue ${queueOptions.name}`,
+              value,
+            );
 
-              subscriber.next(value);
-              subscriber.complete();
-            } catch (err) {
-              subscriber.error(err);
-            }
+            subscriber.next(value);
+            subscriber.complete();
           },
-          {
-            timeout: queueOptions.timeout,
-          },
+          { timeout: queueOptions.timeout },
         )
         .catch((err) => subscriber.error(err));
     });
