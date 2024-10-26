@@ -7,7 +7,7 @@ import type {
   Repository as GithubRepository,
 } from '@octokit/graphql-schema';
 
-import { OCKTOKIT_CLIENT } from '../providers/ocktokit.provider.js';
+import { OCKTOKIT_CLIENT } from './ocktokit.provider.js';
 import { RepositoryWebhook } from './entities/repository-webhook.entity.js';
 
 @Injectable()

@@ -5,6 +5,7 @@ import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { ApolloServerPluginLandingPageLocalDefault } from '@apollo/server/plugin/landingPage/default';
 
+import { QueueModule } from './queue/queue.module.js';
 import { RepositoriesModule } from './repositories/repositories.module.js';
 
 @Module({
@@ -16,7 +17,9 @@ import { RepositoriesModule } from './repositories/repositories.module.js';
       autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
       plugins: [ApolloServerPluginLandingPageLocalDefault() as any],
     }),
+    QueueModule,
     RepositoriesModule,
   ],
+  providers: [],
 })
 export class AppModule {}

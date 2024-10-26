@@ -2,7 +2,6 @@ import {
   Resolver,
   Query,
   Args,
-  Context,
   Parent,
   ResolveField,
   Int,
@@ -10,8 +9,8 @@ import {
 import { RepositoriesService } from './repositories.service.js';
 import { Repository, RepositoryLean } from './entities/repository.entity.js';
 import { RepositoryFile } from './entities/repository-file.entity.js';
-import { RepositoryContext } from './dto/repository-context.dto.js';
 import { RepositoryWebhook } from './entities/repository-webhook.entity.js';
+import { UseQueue } from '../queue/queue.decorator.js';
 
 @Resolver((of) => Repository)
 export class RepositoriesResolver {
@@ -30,10 +29,10 @@ export class RepositoriesResolver {
   }
 
   @Query(() => Repository)
+  @UseQueue({ name: 'repository', concurrency: 2, timeout: 5000 })
   async repository(
     @Args('owner') owner: string,
     @Args('repo') repo: string,
-    @Context() context: { repository: RepositoryContext },
   ): Promise<Repository> {
     const githubRepository = await this.repositoriesService.findOne({
       owner,
