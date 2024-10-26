@@ -8,20 +8,20 @@ import {
   Int,
 } from '@nestjs/graphql';
 import { RepositoriesService } from './repositories.service.js';
-import { Repository } from './entities/repository.entity.js';
+import { Repository, RepositoryLean } from './entities/repository.entity.js';
 import { RepositoryFile } from './entities/repository-file.entity.js';
 import { RepositoryContext } from './dto/repository-context.dto.js';
 import { RepositoryWebhook } from './entities/repository-webhook.entity.js';
 
-@Resolver(() => Repository)
+@Resolver((of) => Repository)
 export class RepositoriesResolver {
   constructor(private readonly repositoriesService: RepositoriesService) {}
 
-  @Query(() => [Repository])
-  async repositories(): Promise<Repository[]> {
-    const res = await this.repositoriesService.findAll();
+  @Query(() => [RepositoryLean])
+  async repositories(): Promise<RepositoryLean[]> {
+    const data = await this.repositoriesService.findAll();
 
-    return res.map((repo) => ({
+    return data.map((repo) => ({
       id: repo.databaseId,
       name: repo.name,
       owner: repo.owner.login,
@@ -35,128 +35,79 @@ export class RepositoriesResolver {
     @Args('repo') repo: string,
     @Context() context: { repository: RepositoryContext },
   ): Promise<Repository> {
-    const githubRepositoryData = await this.repositoriesService.findOne({
+    const githubRepository = await this.repositoriesService.findOne({
       owner,
       repo,
     });
-
-    const githubRepositoryFiles = await this.repositoriesService.retrieveFiles({
-      owner,
-      repo,
-      defaultBranch: githubRepositoryData.default_branch,
-    });
-
-    context.repository = new RepositoryContext(
-      githubRepositoryData,
-      githubRepositoryFiles,
-    );
 
     return {
-      id: githubRepositoryData.id,
-      name: githubRepositoryData.name,
-      owner: githubRepositoryData.owner.login,
-      size: githubRepositoryData.size,
+      id: githubRepository.databaseId,
+      name: githubRepository.name,
+      owner: githubRepository.owner.login,
+      size: githubRepository.diskUsage,
+      defaultBranch: githubRepository.defaultBranchRef.name,
+      isPrivate: githubRepository.isPrivate,
     };
   }
 
   @ResolveField(() => Boolean, {
-    description:
-      'Wheter this repository is private or public. *** This field is only available for a single repository query ***',
+    description: 'Wheter this repository is private or public.',
   })
-  isPrivate(
-    @Parent() parent: Repository,
-    @Context() context: { repository: RepositoryContext },
-  ): boolean {
-    if (!(context.repository instanceof RepositoryContext)) {
-      throw new Error(
-        'repository context not found, please use the single repository query',
-      );
-    }
-
-    if (parent.id !== context.repository.data.id) {
-      throw new Error('invariant violation: repository id mismatch');
-    }
-
-    return context.repository.data.private;
+  isPrivate(@Parent() parent: Repository): boolean {
+    return parent.isPrivate;
   }
 
   @ResolveField(() => Int, {
-    description:
-      'The number of files in this repository. *** This field is only available for a single repository query ***',
+    description: 'The number of files in this repository.',
   })
-  filesCount(
-    @Parent() parent: Repository,
-    @Context() context: { repository: RepositoryContext },
-  ): number {
-    if (!(context.repository instanceof RepositoryContext)) {
-      throw new Error(
-        'repository context not found, please use the single repository query',
-      );
-    }
+  async filesCount(@Parent() parent: Repository): Promise<number> {
+    const files = await this.repositoriesService.retrieveFiles({
+      owner: parent.owner,
+      repo: parent.name,
+      defaultBranch: parent.defaultBranch,
+    });
 
-    if (parent.id !== context.repository.data.id) {
-      throw new Error('invariant violation: repository id mismatch');
-    }
-
-    return context.repository.files.length;
+    return files.length;
   }
 
   @ResolveField(() => RepositoryFile, {
     nullable: true,
-    description:
-      'Random `.yml` file that appears in this repository (if any). *** This field is only available for a single repository query ***',
+    description: 'Random `.yml` file that appears in this repository (if any).',
   })
-  async ymlFile(
-    @Parent() parent: Repository,
-    @Context() context: { repository: RepositoryContext },
-  ): Promise<RepositoryFile | null> {
-    if (!(context.repository instanceof RepositoryContext)) {
-      throw new Error(
-        'repository data not found, please use the single repository query',
-      );
-    }
+  async ymlFile(@Parent() parent: Repository): Promise<RepositoryFile | null> {
+    const files = await this.repositoriesService.retrieveFiles({
+      owner: parent.owner,
+      repo: parent.name,
+      defaultBranch: parent.defaultBranch,
+    });
 
-    const ymlFile = context.repository.files.find((file) =>
-      file.path.endsWith('.yml'),
-    );
+    const ymlFile = files.find((file) => file.path.endsWith('.yml'));
 
-    const ymlFilePath = ymlFile?.path;
-
-    if (!ymlFilePath) {
+    if (!ymlFile?.path) {
       return null;
     }
 
     const fileContent = await this.repositoriesService.retrieveFileContent({
       owner: parent.owner,
       repo: parent.name,
-      path: ymlFilePath,
+      path: ymlFile.path,
     });
 
     return {
-      path: ymlFilePath,
+      path: ymlFile.path,
       content: fileContent,
     };
   }
 
   @ResolveField(() => [RepositoryWebhook], {
-    description:
-      'List of active webhooks for this repository. *** This field is only available for a single repository query ***',
+    description: 'List of active webhooks for this repository.',
   })
   async activeWebhooks(
     @Parent() parent: Repository,
-    @Context() context: { repository: RepositoryContext },
   ): Promise<RepositoryWebhook[]> {
-    if (!(context.repository instanceof RepositoryContext)) {
-      throw new Error(
-        'repository data not found, please use the single repository query',
-      );
-    }
-
-    const webhooks = await this.repositoriesService.retrieveActiveWebhooks({
+    return this.repositoriesService.retrieveActiveWebhooks({
       owner: parent.owner,
       repo: parent.name,
     });
-
-    return webhooks;
   }
 }

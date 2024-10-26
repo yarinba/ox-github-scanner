@@ -2,7 +2,10 @@ import { Inject, Injectable } from '@nestjs/common';
 import { Octokit } from '@octokit/core';
 import type { paginateGraphQLInterface } from '@octokit/plugin-paginate-graphql';
 import type { PaginateInterface as PaginateRestInterface } from '@octokit/plugin-paginate-rest';
-import type { User as GithubUser } from '@octokit/graphql-schema';
+import type {
+  User as GithubUser,
+  Repository as GithubRepository,
+} from '@octokit/graphql-schema';
 
 import { OCKTOKIT_CLIENT } from '../providers/ocktokit.provider.js';
 import { RepositoryWebhook } from './entities/repository-webhook.entity.js';
@@ -45,12 +48,36 @@ export class RepositoriesService {
   }
 
   async findOne({ owner, repo }: { owner: string; repo: string }) {
-    const { data: repoData } = await this.octokit.request(
-      'GET /repos/{owner}/{repo}',
-      { owner, repo },
-    );
+    const query = `
+        query Repository($owner: String!, $repo: String!) {
+            repository(owner: $owner, name: $repo) {
+                databaseId
+                name
+                diskUsage
+                owner {
+                  login
+                }
+                isPrivate
+                defaultBranchRef {
+                  name
+                }
+            }
+        }
+    `;
 
-    return repoData;
+    const { repository } = await this.octokit.graphql<{
+      repository: Pick<
+        GithubRepository,
+        | 'databaseId'
+        | 'name'
+        | 'diskUsage'
+        | 'owner'
+        | 'isPrivate'
+        | 'defaultBranchRef'
+      >;
+    }>(query, { owner, repo });
+
+    return repository;
   }
 
   async retrieveActiveWebhooks({

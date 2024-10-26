@@ -1,7 +1,7 @@
 import { Field, ID, Int, ObjectType } from '@nestjs/graphql';
 
 @ObjectType()
-export class Repository {
+export class RepositoryLean {
   @Field(() => ID, {
     description: 'Identifies the primary key from github database.',
   })
@@ -19,4 +19,11 @@ export class Repository {
     description: 'The number of kilobytes this repository occupies on disk.',
   })
   size: number;
+}
+
+@ObjectType()
+export class Repository extends RepositoryLean {
+  defaultBranch: string;
+
+  isPrivate: boolean;
 }
