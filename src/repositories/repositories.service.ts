@@ -137,7 +137,7 @@ export class RepositoriesService {
     );
 
     if (Array.isArray(data) || data.type !== 'file') {
-      throw new Error('invariant violation: file type mismatch');
+      throw new Error('file type mismatch');
     }
 
     const base64Content = data.content;
