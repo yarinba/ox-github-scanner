@@ -6,6 +6,7 @@ import type {
   User as GithubUser,
   Repository as GithubRepository,
 } from '@octokit/graphql-schema';
+import { GraphQLError } from 'graphql';
 
 import { OCKTOKIT_CLIENT } from './ocktokit.provider.js';
 import { RepositoryWebhook } from './entities/repository-webhook.entity.js';
@@ -19,7 +20,8 @@ export class RepositoriesService {
   ) {}
 
   async findAll() {
-    const query = `
+    try {
+      const query = `
         query AllRepositories($cursor: String) {
             viewer {
                 repositories(first: 100, after: $cursor, orderBy: {field: UPDATED_AT, direction: DESC}) {
@@ -40,15 +42,24 @@ export class RepositoriesService {
         }
     `;
 
-    const { viewer } = await this.octokit.graphql.paginate<{
-      viewer: GithubUser;
-    }>(query);
+      const { viewer } = await this.octokit.graphql.paginate<{
+        viewer: GithubUser;
+      }>(query);
 
-    return viewer.repositories.nodes;
+      return viewer.repositories.nodes;
+    } catch (error) {
+      throw new GraphQLError('Failed to fetch repositories', {
+        extensions: {
+          code: 'GITHUB_API_ERROR',
+          originalError: error.message,
+        },
+      });
+    }
   }
 
   async findOne({ owner, repo }: { owner: string; repo: string }) {
-    const query = `
+    try {
+      const query = `
         query Repository($owner: String!, $repo: String!) {
             repository(owner: $owner, name: $repo) {
                 databaseId
@@ -65,19 +76,34 @@ export class RepositoriesService {
         }
     `;
 
-    const { repository } = await this.octokit.graphql<{
-      repository: Pick<
-        GithubRepository,
-        | 'databaseId'
-        | 'name'
-        | 'diskUsage'
-        | 'owner'
-        | 'isPrivate'
-        | 'defaultBranchRef'
-      >;
-    }>(query, { owner, repo });
+      const { repository } = await this.octokit.graphql<{
+        repository: Pick<
+          GithubRepository,
+          | 'databaseId'
+          | 'name'
+          | 'diskUsage'
+          | 'owner'
+          | 'isPrivate'
+          | 'defaultBranchRef'
+        >;
+      }>(query, { owner, repo });
 
-    return repository;
+      if (!repository) {
+        throw new GraphQLError(`Repository not found: ${owner}/${repo}`, {
+          extensions: { code: 'NOT_FOUND' },
+        });
+      }
+
+      return repository;
+    } catch (error) {
+      if (error instanceof GraphQLError) throw error;
+      throw new GraphQLError('Failed to fetch repository details', {
+        extensions: {
+          code: 'GITHUB_API_ERROR',
+          originalError: error.message,
+        },
+      });
+    }
   }
 
   async retrieveActiveWebhooks({
@@ -87,20 +113,29 @@ export class RepositoriesService {
     owner: string;
     repo: string;
   }): Promise<RepositoryWebhook[]> {
-    const repositoryWebhooks = await this.octokit.paginate(
-      'GET /repos/{owner}/{repo}/hooks',
-      { owner, repo, per_page: 100 },
-    );
+    try {
+      const repositoryWebhooks = await this.octokit.paginate(
+        'GET /repos/{owner}/{repo}/hooks',
+        { owner, repo, per_page: 100 },
+      );
 
-    const activeWebhooks: RepositoryWebhook[] = repositoryWebhooks
-      .filter((hook) => hook.active)
-      .map((hook) => ({
-        id: hook.id,
-        name: hook.name,
-        url: hook.config.url,
-      }));
+      const activeWebhooks: RepositoryWebhook[] = repositoryWebhooks
+        .filter((hook) => hook.active)
+        .map((hook) => ({
+          id: hook.id,
+          name: hook.name,
+          url: hook.config.url,
+        }));
 
-    return activeWebhooks;
+      return activeWebhooks;
+    } catch (error) {
+      throw new GraphQLError('Failed to fetch repository webhooks', {
+        extensions: {
+          code: 'GITHUB_API_ERROR',
+          originalError: error.message,
+        },
+      });
+    }
   }
 
   async retrieveFiles({
@@ -112,14 +147,29 @@ export class RepositoriesService {
     repo: string;
     defaultBranch: string;
   }) {
-    const { data: treeData } = await this.octokit.request(
-      'GET /repos/{owner}/{repo}/git/trees/{tree_sha}',
-      { owner, repo, tree_sha: defaultBranch, recursive: 'true' },
-    );
+    try {
+      const { data: treeData } = await this.octokit.request(
+        'GET /repos/{owner}/{repo}/git/trees/{tree_sha}',
+        { owner, repo, tree_sha: defaultBranch, recursive: 'true' },
+      );
 
-    const files = treeData.tree.filter((file) => file.type === 'blob');
+      if (!treeData.tree) {
+        throw new GraphQLError(`Repository tree not found: ${owner}/${repo}`, {
+          extensions: { code: 'NOT_FOUND' },
+        });
+      }
 
-    return files;
+      const files = treeData.tree.filter((file) => file.type === 'blob');
+      return files;
+    } catch (error) {
+      if (error instanceof GraphQLError) throw error;
+      throw new GraphQLError('Failed to fetch repository files', {
+        extensions: {
+          code: 'GITHUB_API_ERROR',
+          originalError: error.message,
+        },
+      });
+    }
   }
 
   async retrieveFileContent({
@@ -131,19 +181,27 @@ export class RepositoriesService {
     repo: string;
     path: string;
   }) {
-    const { data } = await this.octokit.request(
-      'GET /repos/{owner}/{repo}/contents/{path}',
-      { owner, repo, path },
-    );
+    try {
+      const { data } = await this.octokit.request(
+        'GET /repos/{owner}/{repo}/contents/{path}',
+        { owner, repo, path },
+      );
 
-    if (Array.isArray(data) || data.type !== 'file') {
-      throw new Error('file type mismatch');
+      if (Array.isArray(data) || data.type !== 'file') {
+        throw new GraphQLError(`Invalid file type for path: ${path}`);
+      }
+
+      const base64Content = data.content;
+      const content = Buffer.from(base64Content, 'base64').toString('utf-8');
+      return content;
+    } catch (error) {
+      if (error instanceof GraphQLError) throw error;
+      throw new GraphQLError('Failed to fetch file content', {
+        extensions: {
+          code: 'GITHUB_API_ERROR',
+          originalError: error.message,
+        },
+      });
     }
-
-    const base64Content = data.content;
-
-    const content = Buffer.from(base64Content, 'base64').toString('utf-8');
-
-    return content;
   }
 }
