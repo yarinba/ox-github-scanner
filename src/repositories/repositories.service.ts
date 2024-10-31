@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Octokit } from '@octokit/core';
 import type { paginateGraphQLInterface } from '@octokit/plugin-paginate-graphql';
 import type { PaginateInterface as PaginateRestInterface } from '@octokit/plugin-paginate-rest';
@@ -13,6 +13,7 @@ import { RepositoryWebhook } from './entities/repository-webhook.entity.js';
 
 @Injectable()
 export class RepositoriesService {
+  private readonly logger = new Logger(RepositoriesService.name);
   constructor(
     @Inject(OCKTOKIT_CLIENT)
     private readonly octokit: Octokit &
@@ -48,6 +49,7 @@ export class RepositoriesService {
 
       return viewer.repositories.nodes;
     } catch (error) {
+      this.logger.error('Failed to fetch repositories', error?.message);
       throw new GraphQLError('Failed to fetch repositories', {
         extensions: {
           code: 'GITHUB_API_ERROR',
@@ -96,6 +98,10 @@ export class RepositoriesService {
 
       return repository;
     } catch (error) {
+      this.logger.error(
+        `Failed to fetch repository details for ${owner}/${repo}`,
+        error?.message,
+      );
       if (error instanceof GraphQLError) throw error;
       throw new GraphQLError('Failed to fetch repository details', {
         extensions: {
@@ -129,6 +135,10 @@ export class RepositoriesService {
 
       return activeWebhooks;
     } catch (error) {
+      this.logger.error(
+        `Failed to fetch webhooks for ${owner}/${repo}`,
+        error?.message,
+      );
       throw new GraphQLError('Failed to fetch repository webhooks', {
         extensions: {
           code: 'GITHUB_API_ERROR',
@@ -162,6 +172,10 @@ export class RepositoriesService {
       const files = treeData.tree.filter((file) => file.type === 'blob');
       return files;
     } catch (error) {
+      this.logger.error(
+        `Failed to fetch files for ${owner}/${repo}`,
+        error?.message,
+      );
       if (error instanceof GraphQLError) throw error;
       throw new GraphQLError('Failed to fetch repository files', {
         extensions: {
@@ -195,6 +209,10 @@ export class RepositoriesService {
       const content = Buffer.from(base64Content, 'base64').toString('utf-8');
       return content;
     } catch (error) {
+      this.logger.error(
+        `Failed to fetch file content for ${owner}/${repo}/${path}`,
+        error?.message,
+      );
       if (error instanceof GraphQLError) throw error;
       throw new GraphQLError('Failed to fetch file content', {
         extensions: {
