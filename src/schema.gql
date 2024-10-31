@@ -1,0 +1,59 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+type RepositoryLean {
+  """Identifies the primary key from github database."""
+  id: ID!
+
+  """The name of the repository"""
+  name: String!
+
+  """The User owner of the repository"""
+  owner: String!
+
+  """The number of kilobytes this repository occupies on disk."""
+  size: Int!
+}
+
+type Repository {
+  """Identifies the primary key from github database."""
+  id: ID!
+
+  """The name of the repository"""
+  name: String!
+
+  """The User owner of the repository"""
+  owner: String!
+
+  """The number of kilobytes this repository occupies on disk."""
+  size: Int!
+
+  """Wheter this repository is private or public."""
+  isPrivate: Boolean!
+
+  """The number of files in this repository."""
+  filesCount: Int!
+
+  """Random `.yml` file that appears in this repository (if any)."""
+  ymlFile: RepositoryFile
+
+  """List of active webhooks for this repository."""
+  activeWebhooks: [RepositoryWebhook!]!
+}
+
+type RepositoryFile {
+  path: String!
+  content: String!
+}
+
+type RepositoryWebhook {
+  id: ID!
+  name: String!
+  url: String!
+}
+
+type Query {
+  repositories: [RepositoryLean!]!
+  repository(owner: String!, repo: String!): Repository!
+}
